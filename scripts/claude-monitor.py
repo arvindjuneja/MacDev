@@ -235,12 +235,109 @@ def make_bar(value: int, max_val: int, width: int = 15) -> Text:
     return bar
 
 
-def build_dashboard(data: ClaudeData, compact: bool = False) -> Panel:
-    """Build the complete dashboard as a rich Panel."""
+def build_compact_dashboard(data: ClaudeData) -> Panel:
+    """Build a compact dashboard optimized for small panes (~10 lines)."""
     processes = data.get_processes()
     stats = data.get_stats_cache()
     today = data.get_today_stats()
-    recent = data.get_recent_activity(5 if not compact else 3)
+    tokens = data.get_token_totals(stats)
+    recent = data.get_recent_activity(5)
+
+    from rich.console import Group
+    parts = []
+
+    # === Instances: single line ===
+    if processes:
+        line = Text("● ", style=GREEN)
+        items = []
+        for p in processes:
+            proj = p["project"][:12]
+            cpu_val = float(p["cpu"])
+            cpu_style = RED if cpu_val > 50 else PEACH if cpu_val > 10 else SUBTEXT
+            item = Text(proj, style=PINK)
+            item.append(f" {p['cpu']}%", style=cpu_style)
+            item.append(f" {p['etime']}", style=SUBTEXT)
+            items.append(item)
+        for i, item in enumerate(items):
+            line.append_text(item)
+            if i < len(items) - 1:
+                line.append("  ", style=SUBTEXT)
+        parts.append(line)
+    else:
+        parts.append(Text("○ No active instances", style=SUBTEXT))
+
+    # === TODAY: inline with bars ===
+    today_date = date.today().strftime("%b %-d")
+    msg_line = Text(f"TODAY {today_date}  ", style=f"bold {BLUE}")
+    msg_line.append("Msgs ")
+    msg_line.append_text(make_bar(today["messages"], max(today["messages"], 200), width=8))
+    msg_line.append(f" {today['messages']:,}", style=TEXT)
+    msg_line.append("  Sess ")
+    msg_line.append_text(make_bar(today["sessions"], max(today["sessions"], 10), width=6))
+    msg_line.append(f" {today['sessions']}", style=TEXT)
+    parts.append(msg_line)
+
+    # === TOKENS: one line ===
+    if tokens:
+        line = Text("TOKENS ", style=f"bold {MAUVE}")
+        token_parts = []
+        for m, c in tokens.items():
+            token_parts.append(f"{m} {format_tokens(c)}")
+        line.append(" · ".join(token_parts), style=TEXT)
+        parts.append(line)
+
+    # === RECENT: compact list ===
+    if recent:
+        parts.append(Text("RECENT", style=f"bold {TEAL}"))
+        for entry in reversed(recent):
+            ts = entry.get("timestamp", 0)
+            time_str = datetime.fromtimestamp(ts / 1000).strftime("%H:%M")
+            project = Path(entry.get("project", "")).name or "?"
+            if len(project) > 10:
+                project = project[:9] + "…"
+            display = entry.get("display", "")
+            max_msg = 35
+            if len(display) > max_msg:
+                display = display[:max_msg - 1] + "…"
+            line = Text(f"{time_str} ", style=SUBTEXT)
+            line.append(f"{project:<10} ", style=PINK)
+            line.append(display, style=TEXT)
+            parts.append(line)
+
+    # === LIFETIME: single line ===
+    if stats:
+        total_s = stats.get("totalSessions", 0)
+        total_m = stats.get("totalMessages", 0)
+        parts.append(Text(
+            f"LIFETIME  {total_s} sessions · {total_m:,} msgs",
+            style=f"bold {YELLOW}"
+        ))
+
+    content = Group(*parts)
+    now = datetime.now().strftime("%H:%M:%S")
+    title = Text("CLAUDE CODE MONITOR", style=f"bold {BLUE}")
+    subtitle = Text(f"↻ {now}", style=SUBTEXT)
+
+    return Panel(
+        content,
+        title=title,
+        subtitle=subtitle,
+        border_style=SURFACE,
+        box=box.ROUNDED,
+        expand=True,
+        padding=(0, 1),
+    )
+
+
+def build_dashboard(data: ClaudeData, compact: bool = False) -> Panel:
+    """Build the complete dashboard as a rich Panel."""
+    if compact:
+        return build_compact_dashboard(data)
+
+    processes = data.get_processes()
+    stats = data.get_stats_cache()
+    today = data.get_today_stats()
+    recent = data.get_recent_activity(5)
     tokens = data.get_token_totals(stats)
 
     parts = []
@@ -308,7 +405,7 @@ def build_dashboard(data: ClaudeData, compact: bool = False) -> Panel:
         parts.append(Text(""))
 
     # === Recent Activity ===
-    if recent and not compact:
+    if recent:
         parts.append(Text("  RECENT", style=f"bold {TEAL}"))
         for entry in reversed(recent):
             ts = entry.get("timestamp", 0)
@@ -347,8 +444,6 @@ def build_dashboard(data: ClaudeData, compact: bool = False) -> Panel:
         parts.append(Text(f"  Since {since}", style=SUBTEXT))
 
     # Assemble into panel
-    content = Text("\n").join(parts) if not parts else parts[0]
-    # Use a group for multiple renderables
     from rich.console import Group
     content = Group(*parts)
 
