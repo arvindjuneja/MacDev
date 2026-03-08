@@ -118,34 +118,35 @@ tmux split-window -h -p 35 -c "$PROJECT_DIR"
 # Split right pane top/bottom (50/50)
 tmux split-window -v -p 50 -c "$PROJECT_DIR"
 
-# Split left pane (pane 0) to add Claude Monitor at bottom (20% height)
-tmux select-pane -t "$SESSION_NAME:1.0"
+# Split left pane to add Claude Monitor at bottom (20% height)
+# Note: pane-base-index is 1 in tmux.conf, so panes start at 1
+tmux select-pane -t "$SESSION_NAME:1.1"
 tmux split-window -v -p 20 -c "$PROJECT_DIR"
 
-# Pane layout after splits:
-#   pane 0 = top-left (Claude Code)
-#   pane 1 = bottom-left (Claude Monitor)
-#   pane 2 = top-right (dev server)
-#   pane 3 = bottom-right (system monitor)
+# Pane layout after splits (pane-base-index=1):
+#   pane 1 = top-left (Claude Code)
+#   pane 2 = bottom-left (Claude Monitor)
+#   pane 3 = top-right (dev server)
+#   pane 4 = bottom-right (system monitor)
 
-# Pane 0 (top-left): Claude Code (auto-launch)
-tmux send-keys -t "$SESSION_NAME:1.0" "cd '$PROJECT_DIR' && clear && claude" C-m
+# Pane 1 (top-left): Claude Code (auto-launch)
+tmux send-keys -t "$SESSION_NAME:1.1" "cd '$PROJECT_DIR' && clear && claude" C-m
 
-# Pane 1 (bottom-left): Claude Monitor
+# Pane 2 (bottom-left): Claude Monitor
 if [ -n "$CLAUDE_MONITOR_CMD" ]; then
-    tmux send-keys -t "$SESSION_NAME:1.1" "$CLAUDE_MONITOR_CMD --compact" C-m
+    tmux send-keys -t "$SESSION_NAME:1.2" "$CLAUDE_MONITOR_CMD --compact" C-m
 else
-    tmux send-keys -t "$SESSION_NAME:1.1" "cd '$PROJECT_DIR' && clear && echo 'Install claude-monitor for live dashboard here'" C-m
+    tmux send-keys -t "$SESSION_NAME:1.2" "cd '$PROJECT_DIR' && clear && echo 'Install claude-monitor for live dashboard here'" C-m
 fi
 
-# Pane 2 (top-right): dev server
-tmux send-keys -t "$SESSION_NAME:1.2" "cd '$PROJECT_DIR' && clear && echo 'Dev server pane - run your server here (e.g., npm run dev)'" C-m
+# Pane 3 (top-right): dev server
+tmux send-keys -t "$SESSION_NAME:1.3" "cd '$PROJECT_DIR' && clear && echo 'Dev server pane - run your server here (e.g., npm run dev)'" C-m
 
-# Pane 3 (bottom-right): system monitor
-tmux send-keys -t "$SESSION_NAME:1.3" "$MONITOR_CMD" C-m
+# Pane 4 (bottom-right): system monitor
+tmux send-keys -t "$SESSION_NAME:1.4" "$MONITOR_CMD" C-m
 
 # Select Claude Code pane (top-left)
-tmux select-pane -t "$SESSION_NAME:1.0"
+tmux select-pane -t "$SESSION_NAME:1.1"
 
 # Rename window
 tmux rename-window -t "$SESSION_NAME:1" "workspace"
