@@ -244,7 +244,7 @@ source ~/.zshrc
 ### Via GitHub
 
 ```bash
-cd "/Users/arvind/Documents/macOs dev setup"
+cd path/to/MacDev
 git init
 git add .
 git commit -m "Initial commit: macOS dev setup"

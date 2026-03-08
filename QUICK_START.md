@@ -5,7 +5,7 @@ Get your macOS development environment up and running in 5 minutes!
 ## TL;DR
 
 ```bash
-cd "/Users/arvind/Documents/macOs dev setup"
+cd path/to/MacDev
 ./setup-macos.sh
 ```
 

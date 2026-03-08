@@ -18,7 +18,7 @@ echo "========================================"
 echo ""
 
 # Navigate to project directory
-cd /Users/arvind/Documents/projekty/cmdashboard
+cd ~/projects/myapp  # Change to your project path
 
 echo "What would you like to do?"
 echo ""

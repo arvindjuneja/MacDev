@@ -116,7 +116,7 @@ Moved project-specific scripts to `examples/`:
 ### Quick Start
 
 ```bash
-cd "/Users/arvind/Documents/macOs dev setup"
+cd path/to/MacDev
 ./setup-macos.sh
 ```
 
