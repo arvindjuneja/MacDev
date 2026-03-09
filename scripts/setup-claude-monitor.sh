@@ -51,13 +51,18 @@ print_info() {
     echo -e "${YELLOW}${WRENCH} $1${NC}"
 }
 
-# Check macOS
+# Check OS (macOS or Linux)
 check_os() {
-    if [[ "$OSTYPE" != "darwin"* ]]; then
-        print_error "This script is designed for macOS only."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        OS_TYPE="macos"
+        print_success "Running on macOS"
+    elif [[ "$OSTYPE" == "linux"* ]]; then
+        OS_TYPE="linux"
+        print_success "Running on Linux"
+    else
+        print_error "This script supports macOS and Linux only."
         exit 1
     fi
-    print_success "Running on macOS"
 }
 
 # Ensure Homebrew is available
@@ -80,10 +85,15 @@ install_uv() {
     if command -v uv &> /dev/null; then
         local version=$(uv --version 2>&1)
         print_success "uv already installed ($version)"
-    else
+    elif [[ "$OS_TYPE" == "macos" ]]; then
         print_info "Installing uv via Homebrew..."
         ensure_homebrew
         brew install uv
+        print_success "uv installed ($(uv --version))"
+    else
+        print_info "Installing uv via installer script..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
         print_success "uv installed ($(uv --version))"
     fi
 }
@@ -121,23 +131,36 @@ warmup_dependencies() {
     fi
 }
 
-# Add alias to .zshrc
+# Add alias to shell rc file
 configure_shell() {
     print_step "Adding shell alias..."
 
-    local zshrc="$HOME/.zshrc"
+    # Detect the user's shell rc file
+    local shell_rc=""
+    local shell_name=""
+    if [ -n "$ZSH_VERSION" ] || [[ "$SHELL" == */zsh ]]; then
+        shell_rc="$HOME/.zshrc"
+        shell_name="zsh"
+    elif [ -n "$BASH_VERSION" ] || [[ "$SHELL" == */bash ]]; then
+        shell_rc="$HOME/.bashrc"
+        shell_name="bash"
+    else
+        shell_rc="$HOME/.profile"
+        shell_name="profile"
+    fi
 
-    if ! grep -q "# === Claude Monitor ===" "$zshrc" 2>/dev/null; then
-        cat >> "$zshrc" << 'EOF'
+    if ! grep -q "# === Claude Monitor ===" "$shell_rc" 2>/dev/null; then
+        cat >> "$shell_rc" << 'EOF'
 
 # === Claude Monitor ===
 # Added by MacDev claude-monitor setup
+export PATH="$HOME/.local/bin:$PATH"
 alias cmon='claude-monitor'
 # === End Claude Monitor ===
 EOF
-        print_success "Alias 'cmon' added to .zshrc"
+        print_success "Alias 'cmon' added to $shell_rc"
     else
-        print_success "Claude Monitor shell config already exists in .zshrc"
+        print_success "Claude Monitor shell config already exists in $shell_rc"
     fi
 }
 
@@ -160,7 +183,7 @@ print_completion() {
     echo "  Custom interval:     claude-monitor --interval 10"
     echo "  Quick alias:         cmon"
 
-    echo -e "\n${GREEN}Restart your terminal or run: source ~/.zshrc${NC}\n"
+    echo -e "\n${GREEN}Restart your terminal or source your shell rc file.${NC}\n"
 }
 
 # Main

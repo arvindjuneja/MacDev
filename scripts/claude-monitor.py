@@ -85,6 +85,16 @@ class ClaudeData:
 
     def _get_project(self, pid: str) -> str:
         """Get project name from process working directory."""
+        # On Linux, /proc/<pid>/cwd is a symlink to the working directory
+        if sys.platform == "linux":
+            try:
+                cwd = os.readlink(f"/proc/{pid}/cwd")
+                return Path(cwd).name
+            except (OSError, ValueError):
+                pass
+            return "unknown"
+
+        # On macOS, use lsof to find the working directory
         try:
             result = subprocess.run(
                 ["lsof", "-p", pid],

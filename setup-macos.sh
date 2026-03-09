@@ -53,11 +53,23 @@ print_error() {
     echo -e "${RED}❌ $1${NC}"
 }
 
-# Check if running on macOS
-check_os() {
-    if [[ "$OSTYPE" != "darwin"* ]]; then
-        print_error "This script is designed for macOS only."
+# Detect OS (macOS or Linux)
+detect_os() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        OS_TYPE="macos"
+    elif [[ "$OSTYPE" == "linux"* ]]; then
+        OS_TYPE="linux"
+    else
+        print_error "Unsupported OS: $OSTYPE"
         exit 1
+    fi
+}
+
+# Gate macOS-only features
+require_macos() {
+    if [[ "$OS_TYPE" != "macos" ]]; then
+        print_error "This option requires macOS. On Linux, only Claude Monitor (option 5) is supported."
+        return 1
     fi
 }
 
@@ -145,10 +157,14 @@ run_verification() {
 
 # Main execution
 main() {
-    check_os
+    detect_os
     print_header
-    
-    print_info "This script will help you set up a complete development environment on macOS."
+
+    if [[ "$OS_TYPE" == "linux" ]]; then
+        print_info "Running on Linux. Options 1-4, 6 require macOS; Claude Monitor (5) works on Linux."
+    else
+        print_info "This script will help you set up a complete development environment on macOS."
+    fi
     echo ""
     
     show_menu
@@ -157,6 +173,7 @@ main() {
 
     case $choice in
         1)
+            require_macos || { main; return; }
             echo ""
             echo -e "${GREEN}${SPARKLES} Full Setup Selected${NC}"
             echo ""
@@ -167,18 +184,21 @@ main() {
             run_tmux_setup
             ;;
         2)
+            require_macos || { main; return; }
             echo ""
             echo -e "${BLUE}${WRENCH} Dev Environment Setup Selected${NC}"
             echo ""
             run_dev_setup
             ;;
         3)
+            require_macos || { main; return; }
             echo ""
             echo -e "${PURPLE}${SPARKLES} Terminal Customization Selected${NC}"
             echo ""
             run_terminal_setup
             ;;
         4)
+            require_macos || { main; return; }
             echo ""
             echo -e "${YELLOW}🖥️  Multiplexer Setup Selected${NC}"
             echo ""
