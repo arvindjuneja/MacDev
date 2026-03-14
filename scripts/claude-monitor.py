@@ -256,7 +256,9 @@ class ClaudeData:
                     ts = entry.get("timestamp")
                     if ts is None:
                         continue
-                    entry_date = datetime.fromtimestamp(ts / 1000).date().isoformat()
+                    # Auto-detect ms vs seconds: ms timestamps are > 1e11
+                    entry_dt = datetime.fromtimestamp(ts / 1000 if ts > 1e11 else ts)
+                    entry_date = entry_dt.date().isoformat()
                     if entry_date == today_str:
                         messages += 1
                         sid = entry.get("sessionId")
@@ -353,7 +355,7 @@ def build_compact_dashboard(data: ClaudeData) -> Panel:
         for p in processes:
             proj = p["project"][:12]
             cpu_val = float(p["cpu"])
-            cpu_style = RED if cpu_val > 50 else PEACH if cpu_val > 10 else SUBTEXT
+            cpu_style = RED if cpu_val > 500 else PEACH if cpu_val > 100 else SUBTEXT
             item = Text(proj, style=PINK)
             item.append(f" {p['cpu']}%", style=cpu_style)
             item.append(f" {p['etime']}", style=SUBTEXT)
@@ -469,7 +471,7 @@ def build_dashboard(data: ClaudeData, compact: bool = False) -> Panel:
             if len(proj) > 12:
                 proj = proj[:11] + "…"
             cpu_val = float(p["cpu"])
-            cpu_style = RED if cpu_val > 50 else PEACH if cpu_val > 10 else SUBTEXT
+            cpu_style = RED if cpu_val > 500 else PEACH if cpu_val > 100 else SUBTEXT
             proc_table.add_row(
                 proj,
                 f"PID {p['pid']}",
