@@ -65,7 +65,7 @@ class ClaudeData:
                 continue
             pid = parts[0]
             etime = parts[1]
-            cpu = parts[2]
+            cpu = parts[2].replace(",", ".")
             mem = parts[3]
 
             # Get working directory via lsof
@@ -200,6 +200,45 @@ class ClaudeData:
 
         return entries[-count:]
 
+    def get_lifetime_stats(self) -> dict:
+        """Compute lifetime stats from history.jsonl (fallback when stats-cache.json missing)."""
+        messages = 0
+        sessions = set()
+        first_ts = None
+        daily = {}
+
+        try:
+            with open(self.HISTORY_PATH, "r") as f:
+                for line in f:
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    ts = entry.get("timestamp")
+                    if ts is None:
+                        continue
+                    messages += 1
+                    if first_ts is None or ts < first_ts:
+                        first_ts = ts
+                    sid = entry.get("sessionId")
+                    if sid:
+                        sessions.add(sid)
+                    day = datetime.fromtimestamp(ts / 1000).date().isoformat()
+                    daily[day] = daily.get(day, 0) + 1
+        except FileNotFoundError:
+            pass
+
+        first_date = ""
+        if first_ts:
+            first_date = datetime.fromtimestamp(first_ts / 1000).strftime("%b %-d, %Y")
+
+        return {
+            "totalMessages": messages,
+            "totalSessions": len(sessions),
+            "firstDate": first_date,
+            "activeDays": len(daily),
+        }
+
     def get_token_totals(self, stats: dict | None) -> dict[str, int]:
         """Aggregate tokens per model from stats-cache modelUsage."""
         totals = {}
@@ -314,7 +353,7 @@ def build_compact_dashboard(data: ClaudeData) -> Panel:
             line.append(display, style=TEXT)
             parts.append(line)
 
-    # === LIFETIME: single line ===
+    # === LIFETIME: from stats-cache or computed from history ===
     if stats:
         total_s = stats.get("totalSessions", 0)
         total_m = stats.get("totalMessages", 0)
@@ -322,6 +361,14 @@ def build_compact_dashboard(data: ClaudeData) -> Panel:
             f"LIFETIME  {total_s} sessions · {total_m:,} msgs",
             style=f"bold {YELLOW}"
         ))
+    else:
+        lifetime = data.get_lifetime_stats()
+        if lifetime["totalMessages"] > 0:
+            parts.append(Text(
+                f"LIFETIME  {lifetime['totalSessions']} sessions · "
+                f"{lifetime['totalMessages']:,} msgs · {lifetime['activeDays']} days",
+                style=f"bold {YELLOW}"
+            ))
 
     content = Group(*parts)
     now = datetime.now().strftime("%H:%M:%S")
@@ -452,6 +499,20 @@ def build_dashboard(data: ClaudeData, compact: bool = False) -> Panel:
             style=f"bold {YELLOW}"
         ))
         parts.append(Text(f"  Since {since}", style=SUBTEXT))
+    else:
+        lifetime = data.get_lifetime_stats()
+        if lifetime["totalMessages"] > 0:
+            parts.append(Text(
+                f"  LIFETIME  {lifetime['totalSessions']} sessions · "
+                f"{lifetime['totalMessages']:,} msgs · {lifetime['activeDays']} active days",
+                style=f"bold {YELLOW}"
+            ))
+            if lifetime["firstDate"]:
+                parts.append(Text(f"  Since {lifetime['firstDate']}", style=SUBTEXT))
+            parts.append(Text(
+                "  ℹ Token data requires ~/.claude/stats-cache.json",
+                style=SUBTEXT
+            ))
 
     # Assemble into panel
     from rich.console import Group
