@@ -44,6 +44,7 @@ class ClaudeData:
 
     STATS_PATH = Path.home() / ".claude" / "stats-cache.json"
     HISTORY_PATH = Path.home() / ".claude" / "history.jsonl"
+    PROJECTS_PATH = Path.home() / ".claude" / "projects"
 
     def get_processes(self) -> list[dict]:
         """Get running Claude Code CLI instances via ps + lsof."""
@@ -240,24 +241,66 @@ class ClaudeData:
         }
 
     def get_token_totals(self, stats: dict | None) -> dict[str, int]:
-        """Aggregate tokens per model from stats-cache modelUsage."""
+        """Aggregate tokens per model. Uses stats-cache if available, otherwise scans session files."""
         totals = {}
-        if not stats or "modelUsage" not in stats:
-            return totals
 
-        for model, usage in stats["modelUsage"].items():
-            total = (
-                usage.get("inputTokens", 0)
-                + usage.get("outputTokens", 0)
-                + usage.get("cacheReadInputTokens", 0)
-                + usage.get("cacheCreationInputTokens", 0)
-            )
-            # Simplify model name
-            name = model.replace("claude-", "").split("-2025")[0].split("-2024")[0]
-            totals[name] = totals.get(name, 0) + total
+        # Try stats-cache first
+        if stats and "modelUsage" in stats:
+            for model, usage in stats["modelUsage"].items():
+                total = (
+                    usage.get("inputTokens", 0)
+                    + usage.get("outputTokens", 0)
+                    + usage.get("cacheReadInputTokens", 0)
+                    + usage.get("cacheCreationInputTokens", 0)
+                )
+                name = model.replace("claude-", "").split("-2025")[0].split("-2024")[0]
+                totals[name] = totals.get(name, 0) + total
+        else:
+            # Scan session JSONL files in ~/.claude/projects/
+            totals = self._scan_session_tokens()
 
         # Sort by token count descending
         return dict(sorted(totals.items(), key=lambda x: x[1], reverse=True))
+
+    def _scan_session_tokens(self) -> dict[str, int]:
+        """Scan all session JSONL files for token usage per model."""
+        totals = {}
+        try:
+            for project_dir in self.PROJECTS_PATH.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                for session_file in project_dir.glob("*.jsonl"):
+                    try:
+                        with open(session_file, "r") as f:
+                            for line in f:
+                                if '"usage"' not in line:
+                                    continue
+                                try:
+                                    entry = json.loads(line)
+                                except json.JSONDecodeError:
+                                    continue
+                                msg = entry.get("message", {})
+                                if not isinstance(msg, dict):
+                                    continue
+                                model = msg.get("model", "")
+                                usage = msg.get("usage", {})
+                                if not model or not usage:
+                                    continue
+                                total = (
+                                    usage.get("input_tokens", 0)
+                                    + usage.get("output_tokens", 0)
+                                    + usage.get("cache_read_input_tokens", 0)
+                                    + usage.get("cache_creation_input_tokens", 0)
+                                )
+                                if total == 0:
+                                    continue
+                                name = model.replace("claude-", "").split("-2025")[0].split("-2024")[0]
+                                totals[name] = totals.get(name, 0) + total
+                    except (OSError, PermissionError):
+                        continue
+        except (FileNotFoundError, PermissionError):
+            pass
+        return totals
 
 
 def format_tokens(n: int) -> str:
@@ -509,10 +552,6 @@ def build_dashboard(data: ClaudeData, compact: bool = False) -> Panel:
             ))
             if lifetime["firstDate"]:
                 parts.append(Text(f"  Since {lifetime['firstDate']}", style=SUBTEXT))
-            parts.append(Text(
-                "  ℹ Token data requires ~/.claude/stats-cache.json",
-                style=SUBTEXT
-            ))
 
     # Assemble into panel
     from rich.console import Group
