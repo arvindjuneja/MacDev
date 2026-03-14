@@ -29,9 +29,11 @@ This repository provides automated scripts to set up a complete development envi
 ### 📊 Claude Code Monitor
 - **Live TUI dashboard** for tracking Claude Code CLI instances
 - Active instance tracking (PID, CPU%, uptime, project)
-- Today's message/session counts from `history.jsonl`
-- Lifetime token usage by model from `stats-cache.json`
+- Today's message/session counts
+- Lifetime token usage by model (auto-scanned from session files)
+- Session & message history with active days count
 - Recent activity feed with timestamps
+- Works out of the box — no config needed, reads directly from `~/.claude/`
 - Catppuccin Mocha colors, flicker-free 5s refresh via `rich`
 
 ## 🚀 Quick Start
@@ -115,7 +117,7 @@ Installs tmux with Catppuccin Mocha theme, TPM, session persistence plugins, bto
 ./scripts/setup-claude-monitor.sh
 ```
 
-Installs the live monitoring dashboard. Requires `uv` (auto-installed via Homebrew).
+Installs the live monitoring dashboard. Requires `uv` (auto-installed via Homebrew/installer).
 
 **Usage after install:**
 
@@ -123,6 +125,7 @@ Installs the live monitoring dashboard. Requires `uv` (auto-installed via Homebr
 claude-monitor          # Live dashboard (5s refresh)
 claude-monitor --once   # Single snapshot
 claude-monitor -i 10    # Custom refresh interval
+claude-monitor --compact # Compact mode for small tmux panes
 cmon                    # Alias for claude-monitor
 ```
 
@@ -130,24 +133,39 @@ cmon                    # Alias for claude-monitor
 
 ```
 ╭──────────────────────── CLAUDE CODE MONITOR ─────────────────────────╮
-│  ● 5 active instances                                                │
-│  MacDev       PID 56300  CPU 9.7%    37m                             │
-│  bhealth      PID 1237   CPU 8.7%    3d 12h                         │
-│  studio       PID 63503  CPU 0.7%    23m                             │
+│  ● 2 active instances                                                │
+│  MacDev       PID 76988  CPU 11.9%   33m                             │
+│  myproject    PID 23919  CPU 0.4%    2d 21h                          │
 │                                                                      │
-│  TODAY  Mar 8                                                        │
-│  Messages █░░░░░░░░░░░░░░  15                                        │
-│  Sessions ██████░░░░░░░░░  4                                         │
+│  TODAY  Mar 14                                                       │
+│  Messages █░░░░░░░░░░░░░░  9                                         │
+│  Sessions ███░░░░░░░░░░░░  2                                         │
 │                                                                      │
 │  TOKENS (lifetime)                                                   │
-│  opus-4-5           2.07B tokens                                     │
-│  opus-4-6           730M tokens                                      │
-│  sonnet-4-5         114M tokens                                      │
+│  opus-4-6           97M tokens                                       │
 │                                                                      │
-│  LIFETIME  171 sessions · 93,674 msgs                                │
-│  Since Jan 13, 2026                                                  │
-╰──────────────────────────── ↻ 02:02:17 ──────────────────────────────╯
+│  RECENT                                                              │
+│  18:49 MacDev     fix the login bug                                  │
+│  18:47 myproject  add dark mode support                              │
+│                                                                      │
+│  LIFETIME  8 sessions · 43 msgs · 7 active days                      │
+│  Since Feb 26, 2026                                                  │
+╰──────────────────────────── ↻ 18:50:09 ──────────────────────────────╯
 ```
+
+**Where does the data come from?**
+
+The monitor reads directly from Claude Code's local files — no API keys or config needed:
+
+| Data | Source |
+|------|--------|
+| Active instances | `ps` + `lsof` (running `claude` processes) |
+| Today's messages/sessions | `~/.claude/history.jsonl` |
+| Token usage per model | `~/.claude/projects/*/*.jsonl` (session files) |
+| Lifetime stats | `~/.claude/history.jsonl` (all entries) |
+| Recent activity | `~/.claude/history.jsonl` (last 5 entries) |
+
+If `~/.claude/stats-cache.json` exists (some Claude Code versions generate it), the monitor uses that too for enriched stats.
 
 ### Dev Session (tmux layout)
 

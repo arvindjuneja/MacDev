@@ -78,7 +78,7 @@ macOs dev setup/
 | `pimp-my-terminal.sh` | Installs Oh My Zsh, Powerlevel10k, modern CLI tools | ✅ Yes |
 | `setup-tmux.sh` | Installs tmux, btop, TPM, Catppuccin theme, dev sessions | ✅ Yes |
 | `setup-claude-monitor.sh` | Installs Claude Code Monitor dashboard | ✅ Yes |
-| `claude-monitor.py` | Live TUI dashboard for Claude Code instances (rich) | ✅ Yes (`uv run`) |
+| `claude-monitor.py` | Live TUI dashboard — scans `~/.claude/` for instances, tokens, history | ✅ Yes (`uv run`) |
 | `verify-setup.sh` | Checks what's installed | ✅ Yes |
 
 ### configs/

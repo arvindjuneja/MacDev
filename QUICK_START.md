@@ -151,6 +151,13 @@ npm install -g typescript   # TypeScript
 ./scripts/pimp-my-terminal.sh
 ```
 
+**Just Claude Code Monitor:**
+```bash
+./scripts/setup-claude-monitor.sh
+```
+
+After setup, run `cmon` or `claude-monitor` to see a live dashboard with your active Claude instances, token usage per model, session history, and more. All data is read automatically from `~/.claude/` — no config needed.
+
 **Just verification:**
 ```bash
 ./scripts/verify-setup.sh
