@@ -1,6 +1,6 @@
-# 🚀 macOS Development Setup
+# 🚀 macOS & Windows Development Setup
 
-Complete, automated setup for macOS development environments. Get up and running with essential dev tools, a beautiful terminal, tmux workflow, and a live Claude Code monitoring dashboard.
+Complete, automated setup for macOS and Windows development environments. Get up and running with essential dev tools, a beautiful terminal, tmux workflow, and a live Claude Code monitoring dashboard.
 
 ## ✨ What This Does
 
@@ -52,7 +52,42 @@ This launches an interactive menu:
 6. **Verify Setup** - Check what's already installed
 7. **Exit**
 
-## 📋 Prerequisites
+## 🪟 Windows Setup
+
+### One-Command Setup
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup-windows.ps1
+```
+
+Same interactive menu, adapted for Windows:
+
+1. **Full Setup** - Dev tools + Terminal + Multiplexer
+2. **Dev Environment Only** - Git, Python (pyenv-win), Node.js, utilities via winget + scoop
+3. **Terminal Only** - Oh My Posh + PSReadLine + modern CLI tools + Catppuccin theme
+4. **Multiplexer Only** - Windows Terminal panes + optional WSL2/tmux
+5. **Claude Monitor** - Live dashboard for Claude Code instances
+6. **Verify Setup** - Check what's already installed
+
+### Windows Equivalents
+
+| macOS | Windows |
+|-------|---------|
+| Homebrew | winget + scoop |
+| Oh My Zsh + Powerlevel10k | Oh My Posh + Catppuccin theme |
+| zsh-autosuggestions | PSReadLine PredictiveIntelliSense |
+| zsh-syntax-highlighting | PSReadLine inline predictions |
+| tmux | Windows Terminal panes + optional WSL/tmux |
+| .zshrc | PowerShell $PROFILE |
+
+### Windows Prerequisites
+
+- Windows 10 or later
+- PowerShell 5.1+ (pre-installed)
+- Internet connection
+- winget (pre-installed on Windows 10/11)
+
+## 📋 macOS Prerequisites
 
 - macOS 11.0 or later
 - Terminal with zsh (default on modern macOS)
@@ -63,15 +98,26 @@ This launches an interactive menu:
 
 ```
 MacDev/
-├── setup-macos.sh                # Main entry point (interactive menu)
-├── scripts/                      # Core setup scripts
+├── setup-macos.sh                # macOS entry point (interactive menu)
+├── setup-windows.ps1             # Windows entry point (interactive menu)
+├── scripts/                      # macOS/Linux setup scripts
 │   ├── setup-dev-env.sh         # Development environment installer
 │   ├── pimp-my-terminal.sh      # Terminal customization installer
 │   ├── setup-tmux.sh            # tmux + theme + plugins installer
 │   ├── setup-claude-monitor.sh  # Claude Code Monitor installer
-│   ├── claude-monitor.py        # Live dashboard (rich TUI)
+│   ├── claude-monitor.py        # Live dashboard (rich TUI, cross-platform)
 │   └── verify-setup.sh          # Verification script
-├── configs/                      # Configuration files
+├── windows/                      # Windows setup scripts (PowerShell)
+│   ├── setup-dev-env.ps1        # Dev tools via winget + scoop
+│   ├── pimp-my-terminal.ps1     # Oh My Posh + PSReadLine + CLI tools
+│   ├── setup-tmux.ps1           # Windows Terminal + optional WSL/tmux
+│   ├── setup-claude-monitor.ps1 # Claude Monitor installer
+│   ├── dev-session.ps1          # Multi-pane layout via wt CLI
+│   ├── verify-setup.ps1         # Verification script
+│   └── configs/                 # Windows-specific configs
+│       ├── oh-my-posh-theme.json       # Catppuccin Mocha for Oh My Posh
+│       └── windows-terminal-settings.json  # Color scheme for Windows Terminal
+├── configs/                      # macOS configuration files
 │   ├── tmux.conf                # tmux config (Catppuccin Mocha theme)
 │   └── dev-session.sh           # Dev session layout launcher
 ├── docs/                         # Documentation
@@ -271,6 +317,7 @@ This setup installs and configures these open-source projects:
 - [tmux](https://github.com/tmux/tmux) · [Catppuccin](https://github.com/catppuccin/tmux) · [TPM](https://github.com/tmux-plugins/tpm)
 - [eza](https://github.com/eza-community/eza) · [bat](https://github.com/sharkdp/bat) · [fzf](https://github.com/junegunn/fzf) · [fd](https://github.com/sharkdp/fd)
 - [rich](https://github.com/Textualize/rich) · [uv](https://github.com/astral-sh/uv)
+- [Oh My Posh](https://ohmyposh.dev/) · [Scoop](https://scoop.sh/) · [Windows Terminal](https://github.com/microsoft/terminal)
 
 ---
 
