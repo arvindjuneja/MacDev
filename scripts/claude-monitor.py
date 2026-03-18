@@ -37,6 +37,25 @@ MAUVE = "#cba6f7"
 RED = "#f38ba8"
 YELLOW = "#f9e2af"
 TEAL = "#94e2d5"
+FLAMINGO = "#f2cdcd"
+
+# Pricing per 1M tokens (USD) — as of March 2026
+MODEL_PRICING = {
+    "opus-4-6":   {"input": 15.0, "output": 75.0, "cache_read": 1.50, "cache_create": 18.75},
+    "opus-4-5":   {"input": 15.0, "output": 75.0, "cache_read": 1.50, "cache_create": 18.75},
+    "sonnet-4-6": {"input": 3.0,  "output": 15.0, "cache_read": 0.30, "cache_create": 3.75},
+    "sonnet-4-5": {"input": 3.0,  "output": 15.0, "cache_read": 0.30, "cache_create": 3.75},
+    "haiku-4-5":  {"input": 0.80, "output": 4.0,  "cache_read": 0.08, "cache_create": 1.0},
+}
+
+def _match_pricing(model_id: str) -> dict:
+    """Match a model ID to its pricing tier."""
+    model_lower = model_id.lower()
+    for key, pricing in MODEL_PRICING.items():
+        if key.replace("-", "") in model_lower.replace("-", ""):
+            return pricing
+    # Fallback to opus pricing (conservative)
+    return MODEL_PRICING["opus-4-6"]
 
 
 class ClaudeData:
@@ -302,6 +321,44 @@ class ClaudeData:
             pass
         return totals
 
+    def get_cost_breakdown(self, stats: dict | None) -> dict[str, dict]:
+        """Calculate cost per model from stats-cache modelUsage."""
+        breakdown = {}
+        if not stats or "modelUsage" not in stats:
+            return breakdown
+
+        for model, usage in stats["modelUsage"].items():
+            pricing = _match_pricing(model)
+            input_t = usage.get("inputTokens", 0)
+            output_t = usage.get("outputTokens", 0)
+            cache_read = usage.get("cacheReadInputTokens", 0)
+            cache_create = usage.get("cacheCreationInputTokens", 0)
+
+            cost = (
+                (input_t / 1_000_000) * pricing["input"]
+                + (output_t / 1_000_000) * pricing["output"]
+                + (cache_read / 1_000_000) * pricing["cache_read"]
+                + (cache_create / 1_000_000) * pricing["cache_create"]
+            )
+
+            name = model.replace("claude-", "").split("-2025")[0].split("-2024")[0]
+            if name in breakdown:
+                breakdown[name]["cost"] += cost
+                breakdown[name]["input"] += input_t
+                breakdown[name]["output"] += output_t
+                breakdown[name]["cache_read"] += cache_read
+                breakdown[name]["cache_create"] += cache_create
+            else:
+                breakdown[name] = {
+                    "cost": cost,
+                    "input": input_t,
+                    "output": output_t,
+                    "cache_read": cache_read,
+                    "cache_create": cache_create,
+                }
+
+        return dict(sorted(breakdown.items(), key=lambda x: x[1]["cost"], reverse=True))
+
 
 def format_tokens(n: int) -> str:
     """Format token count to human-readable form."""
@@ -369,8 +426,18 @@ def build_compact_dashboard(data: ClaudeData) -> Panel:
     msg_line.append(f" {today['sessions']}", style=TEXT)
     parts.append(msg_line)
 
-    # === TOKENS: one line ===
-    if tokens:
+    # === TOKENS + COST: one line ===
+    cost_breakdown = data.get_cost_breakdown(stats)
+    if cost_breakdown:
+        total_cost = sum(v["cost"] for v in cost_breakdown.values())
+        line = Text("COST ", style=f"bold {MAUVE}")
+        cost_parts = []
+        for m, v in cost_breakdown.items():
+            cost_parts.append(f"{m} ${v['cost']:,.0f}")
+        line.append(" · ".join(cost_parts), style=TEXT)
+        line.append(f"  = ${total_cost:,.2f}", style=YELLOW)
+        parts.append(line)
+    elif tokens:
         line = Text("TOKENS ", style=f"bold {MAUVE}")
         token_parts = []
         for m, c in tokens.items():
@@ -497,8 +564,35 @@ def build_dashboard(data: ClaudeData, compact: bool = False) -> Panel:
 
     parts.append(Text(""))
 
-    # === Token Totals ===
-    if tokens:
+    # === Token & Cost Totals ===
+    cost_breakdown = data.get_cost_breakdown(stats)
+    if cost_breakdown:
+        total_cost = sum(v["cost"] for v in cost_breakdown.values())
+        parts.append(Text(f"  TOKENS & COST (lifetime)  ${total_cost:,.2f}", style=f"bold {MAUVE}"))
+
+        cost_table = Table(
+            show_header=True, box=None, padding=(0, 1),
+            expand=True, pad_edge=False
+        )
+        cost_table.add_column("Model", style=PINK, max_width=16, no_wrap=True)
+        cost_table.add_column("Input", style=SUBTEXT, max_width=10, justify="right")
+        cost_table.add_column("Output", style=PEACH, max_width=10, justify="right")
+        cost_table.add_column("Cache R", style=SUBTEXT, max_width=10, justify="right")
+        cost_table.add_column("Cache W", style=SUBTEXT, max_width=10, justify="right")
+        cost_table.add_column("Cost", style=YELLOW, max_width=10, justify="right")
+
+        for model, v in cost_breakdown.items():
+            cost_table.add_row(
+                model,
+                format_tokens(v["input"]),
+                format_tokens(v["output"]),
+                format_tokens(v["cache_read"]),
+                format_tokens(v["cache_create"]),
+                f"${v['cost']:,.2f}",
+            )
+        parts.append(cost_table)
+        parts.append(Text(""))
+    elif tokens:
         parts.append(Text("  TOKENS (lifetime)", style=f"bold {MAUVE}"))
         for model, count in tokens.items():
             parts.append(Text(f"  {model:<18} {format_tokens(count)} tokens", style=TEXT))
