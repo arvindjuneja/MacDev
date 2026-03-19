@@ -66,7 +66,13 @@ class ClaudeData:
     PROJECTS_PATH = Path.home() / ".claude" / "projects"
 
     def get_processes(self) -> list[dict]:
-        """Get running Claude Code CLI instances via ps + lsof."""
+        """Get running Claude Code CLI instances via ps (Unix) or wmic (Windows)."""
+        if sys.platform == "win32":
+            return self._get_processes_windows()
+        return self._get_processes_unix()
+
+    def _get_processes_unix(self) -> list[dict]:
+        """Get processes on macOS/Linux via ps."""
         try:
             result = subprocess.run(
                 ["ps", "-eo", "pid,etime,pcpu,pmem,command"],
@@ -88,7 +94,6 @@ class ClaudeData:
             cpu = parts[2].replace(",", ".")
             mem = parts[3]
 
-            # Get working directory via lsof
             project = self._get_project(pid)
 
             instances.append({
@@ -99,12 +104,97 @@ class ClaudeData:
                 "project": project,
             })
 
-        # Sort by CPU descending
+        instances.sort(key=lambda x: float(x["cpu"]), reverse=True)
+        return instances
+
+    def _get_processes_windows(self) -> list[dict]:
+        """Get processes on Windows via wmic/powershell."""
+        try:
+            # Use PowerShell to get Claude processes with details
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-Process -Name 'claude' -ErrorAction SilentlyContinue | "
+                 "Select-Object Id, CPU, WorkingSet64, StartTime, Path | "
+                 "ConvertTo-Json"],
+                capture_output=True, text=True, timeout=10
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return []
+
+        if not result.stdout.strip():
+            return []
+
+        instances = []
+        try:
+            data = json.loads(result.stdout)
+            # Ensure it's a list (single process returns a dict)
+            if isinstance(data, dict):
+                data = [data]
+
+            for proc in data:
+                pid = str(proc.get("Id", ""))
+                cpu = f"{proc.get('CPU', 0):.1f}"
+                mem_bytes = proc.get("WorkingSet64", 0)
+                mem_mb = mem_bytes / (1024 * 1024)
+
+                # Calculate elapsed time
+                start_time = proc.get("StartTime", {})
+                etime = "?"
+                if start_time:
+                    try:
+                        # PowerShell returns DateTime as a string or object
+                        if isinstance(start_time, str):
+                            from datetime import datetime as dt
+                            start = dt.fromisoformat(start_time)
+                        else:
+                            # Handle .NET DateTime ticks
+                            ticks = start_time.get("/Date(", start_time)
+                            if isinstance(ticks, (int, float)):
+                                start = datetime.fromtimestamp(ticks / 1000)
+                            else:
+                                start = datetime.now()
+                        delta = datetime.now() - start
+                        total_min = int(delta.total_seconds() / 60)
+                        if total_min >= 1440:
+                            etime = f"{total_min // 1440}d {(total_min % 1440) // 60}h"
+                        elif total_min >= 60:
+                            etime = f"{total_min // 60}h {total_min % 60}m"
+                        else:
+                            etime = f"{total_min}m"
+                    except (ValueError, TypeError, KeyError):
+                        etime = "?"
+
+                project = self._get_project(pid)
+
+                instances.append({
+                    "pid": pid,
+                    "etime": etime,
+                    "cpu": cpu,
+                    "mem": f"{mem_mb:.0f}",
+                    "project": project,
+                })
+        except (json.JSONDecodeError, KeyError):
+            pass
+
         instances.sort(key=lambda x: float(x["cpu"]), reverse=True)
         return instances
 
     def _get_project(self, pid: str) -> str:
         """Get project name from process working directory."""
+        # On Windows, use PowerShell to get the working directory
+        if sys.platform == "win32":
+            try:
+                result = subprocess.run(
+                    ["powershell", "-NoProfile", "-Command",
+                     f"(Get-Process -Id {pid} -ErrorAction SilentlyContinue).Path | Split-Path -Parent"],
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.stdout.strip():
+                    return Path(result.stdout.strip()).name
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass
+            return "unknown"
+
         # On Linux, /proc/<pid>/cwd is a symlink to the working directory
         if sys.platform == "linux":
             try:
@@ -186,7 +276,9 @@ class ClaudeData:
                     ts = entry.get("timestamp")
                     if ts is None:
                         continue
-                    entry_date = datetime.fromtimestamp(ts / 1000).date().isoformat()
+                    # Auto-detect ms vs seconds: ms timestamps are > 1e11
+                    entry_dt = datetime.fromtimestamp(ts / 1000 if ts > 1e11 else ts)
+                    entry_date = entry_dt.date().isoformat()
                     if entry_date == today_str:
                         messages += 1
                         sid = entry.get("sessionId")
@@ -402,7 +494,7 @@ def build_compact_dashboard(data: ClaudeData) -> Panel:
         for p in processes:
             proj = p["project"][:12]
             cpu_val = float(p["cpu"])
-            cpu_style = RED if cpu_val > 50 else PEACH if cpu_val > 10 else SUBTEXT
+            cpu_style = RED if cpu_val > 500 else PEACH if cpu_val > 100 else SUBTEXT
             item = Text(proj, style=PINK)
             item.append(f" {p['cpu']}%", style=cpu_style)
             item.append(f" {p['etime']}", style=SUBTEXT)
@@ -416,7 +508,7 @@ def build_compact_dashboard(data: ClaudeData) -> Panel:
         parts.append(Text("○ No active instances", style=SUBTEXT))
 
     # === TODAY: inline with bars ===
-    today_date = date.today().strftime("%b %-d")
+    today_date = date.today().strftime("%b %d")
     msg_line = Text(f"TODAY {today_date}  ", style=f"bold {BLUE}")
     msg_line.append("Msgs ")
     msg_line.append_text(make_bar(today["messages"], max(today["messages"], 200), width=8))
@@ -536,7 +628,7 @@ def build_dashboard(data: ClaudeData, compact: bool = False) -> Panel:
             if len(proj) > 12:
                 proj = proj[:11] + "…"
             cpu_val = float(p["cpu"])
-            cpu_style = RED if cpu_val > 50 else PEACH if cpu_val > 10 else SUBTEXT
+            cpu_style = RED if cpu_val > 500 else PEACH if cpu_val > 100 else SUBTEXT
             proc_table.add_row(
                 proj,
                 f"PID {p['pid']}",
@@ -547,7 +639,7 @@ def build_dashboard(data: ClaudeData, compact: bool = False) -> Panel:
     parts.append(Text(""))
 
     # === Today Stats ===
-    today_date = date.today().strftime("%b %-d")
+    today_date = date.today().strftime("%b %d")
     parts.append(Text(f"  TODAY  {today_date}", style=f"bold {BLUE}"))
 
     msg_max = max(today["messages"], 200)
@@ -626,7 +718,7 @@ def build_dashboard(data: ClaudeData, compact: bool = False) -> Panel:
         first_date = stats.get("firstSessionDate", "")
         if first_date:
             try:
-                since = datetime.fromisoformat(first_date.replace("Z", "+00:00")).strftime("%b %-d, %Y")
+                since = datetime.fromisoformat(first_date.replace("Z", "+00:00")).strftime("%b %d, %Y")
             except (ValueError, AttributeError):
                 since = "?"
         else:
